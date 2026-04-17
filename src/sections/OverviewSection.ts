@@ -146,6 +146,7 @@ export function createOverviewSection(data: OverviewSectionParams): LovelaceSect
     cards.push({
       type: 'heading',
       heading: localize('sections.summaries'),
+      icon: 'mdi:view-dashboard-variant',
     });
 
     // Layout logic: adapt to number of cards
@@ -174,6 +175,7 @@ export function createOverviewSection(data: OverviewSectionParams): LovelaceSect
     cards.push({
       type: 'heading',
       heading: localize('sections.favorites'),
+      icon: 'mdi:star-outline',
     });
 
     const showState = config.favorites_show_state === true;
