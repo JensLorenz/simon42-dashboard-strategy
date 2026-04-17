@@ -31,6 +31,8 @@
     "security_safe": "Alles gesichert",
     "batteries_critical_one": "Batterie kritisch",
     "batteries_critical_many": "Batterien kritisch",
+    "batteries_unknown_one": "Batterie unbekannt",
+    "batteries_unknown_many": "Batterien unbekannt",
     "batteries_ok": "Alle Batterien OK",
     "climate_active_one": "Thermostat aktiv",
     "climate_active_many": "Thermostate aktiv",
