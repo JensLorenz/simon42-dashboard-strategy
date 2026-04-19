@@ -5,7 +5,8 @@
 import { LitElement, html, css, type PropertyValues } from 'lit';
 import type { HomeAssistant, HassEntity } from '../types/homeassistant';
 import { Registry } from '../Registry';
-import { BatteryStatus, type BatteryStatusGroup, buildBatteryStatusGroups, getBatteryStatusDisplay } from '../utils/battery-utils';
+import { type BatteryStatus, type RecBatteryStatus, type BatteryStatusGroup,
+  buildBatteryStatusGroups, getBatteryStatusDisplay, getBatteryStatusGroup } from '../utils/battery-utils';
 import { trackHassUpdate, debugLog, timeStart, timeEnd } from '../utils/debug';
 import { localize } from '../utils/localize';
 import { SECURITY_EXCLUDED_PLATFORMS } from '../utils/entity-filter';
@@ -92,7 +93,7 @@ class Simon42SummaryCard extends LitElement {
   private _count = 0;
   private _config!: SummaryCardConfig;
   private _relevantEntityIds: Set<string> | null = null;
-  private _batteryPair: { status: BatteryStatus, group: BatteryStatusGroup } | null = null;
+  private _batteryPair!: { status: BatteryStatus, group: BatteryStatusGroup };
 
   static styles = CSS_STYLES;
 
@@ -100,7 +101,6 @@ class Simon42SummaryCard extends LitElement {
     this._config = config;
     this._count = 0;
     this._relevantEntityIds = null;
-    this._batteryPair = null;
   }
 
   protected willUpdate(changedProps: PropertyValues): void {
@@ -112,7 +112,6 @@ class Simon42SummaryCard extends LitElement {
     if (!oldHass || oldHass.entities !== this.hass.entities) {
       this._count = 0;
       this._relevantEntityIds = null;
-      this._batteryPair = null;
       debugLog(`summary-${this._config.summary_type}: cache invalidated (registry changed)`);
     }
 
@@ -187,15 +186,15 @@ class Simon42SummaryCard extends LitElement {
       }
 
       case 'batteries': {
-        const batteryGroups = buildBatteryStatusGroups(this.hass, this._config);
+        const batteryGroups: RecBatteryStatus = buildBatteryStatusGroups(this.hass, this._config);
         const statusOrder: BatteryStatus[] = ['critical', 'unknown', 'good'];
 
         for (const status of statusOrder) {
-          const group = batteryGroups[status];
+          const group = getBatteryStatusGroup(batteryGroups, status);
           this._batteryPair = { status, group };
           if (group.entities.length > 0) break;
         }
-        result = this._batteryPair?.group.entities || [];
+        result = this._batteryPair.group.entities;
         break;
       }
 
@@ -298,8 +297,8 @@ class Simon42SummaryCard extends LitElement {
         };
 
       case 'batteries': {
-        const status = this._batteryPair?.status || 'good';
-        const display = getBatteryStatusDisplay(this._config)[status];
+        const status = this._batteryPair.status;
+        const display = getBatteryStatusDisplay(this._config, status);
         return {
           icon: display.icon,
           name: status !== 'good'

@@ -3,6 +3,7 @@ import type { Simon42StrategyConfig } from '../types/strategy';
 import { filterBatteryEntities } from './entity-filter';
 
 export type BatteryStatus = 'unknown' | 'critical' | 'low' | 'good';
+export type RecBatteryStatus = Record<BatteryStatus, BatteryStatusGroup>;
 
 export interface BatteryStatusGroup {
   entities: string[];
@@ -23,20 +24,29 @@ type BatteryConfig = Pick<
  * Returns the display configuration for each battery status.
  * Thresholds are taken from the config, with defaults if not set.
  */
-export function getBatteryStatusDisplay(config: BatteryConfig): Record<BatteryStatus, BatteryStatusDisplay> {
+export function getBatteryStatusDisplay(config: BatteryConfig, status: BatteryStatus): BatteryStatusDisplay {
   const criticalThreshold = config.battery_critical_threshold ?? 20;
   const lowThreshold = config.battery_low_threshold ?? 50;
 
-  return {
-    unknown: { icon: 'mdi:battery-unknown', color: 'white', info: null },
-    critical: { icon: 'mdi:battery-alert', color: 'red', info: `< ${criticalThreshold}%` },
-    low: { icon: 'mdi:battery-20', color: 'yellow', info: `${criticalThreshold}% - ${lowThreshold}%` },
-    good: { icon: 'mdi:battery', color: 'green', info: `> ${lowThreshold}%` },
-  };
+  switch (status) {
+    case 'unknown':  return { icon: 'mdi:battery-unknown', color: 'white', info: null, };
+    case 'critical': return { icon: 'mdi:battery-alert', color: 'red', info: `< ${criticalThreshold}%`, };
+    case 'low':      return { icon: 'mdi:battery-20', color: 'yellow', info: `${criticalThreshold}% - ${lowThreshold}%`, };
+    case 'good':     return { icon: 'mdi:battery', color: 'green', info: `> ${lowThreshold}%`, };
+  }
 }
 
-export function buildBatteryStatusGroups(hass: HomeAssistant, config: BatteryConfig): Record<BatteryStatus, BatteryStatusGroup> {
-  const batteryGroups: Record<BatteryStatus, BatteryStatusGroup> = {
+export function getBatteryStatusGroup(batteryGroups: RecBatteryStatus, status: BatteryStatus): BatteryStatusGroup {
+  switch (status) {
+    case 'unknown': return batteryGroups.unknown;
+    case 'critical': return batteryGroups.critical;
+    case 'low': return batteryGroups.low;
+    case 'good': return batteryGroups.good;
+  }
+}
+
+export function buildBatteryStatusGroups(hass: HomeAssistant, config: BatteryConfig): RecBatteryStatus {
+  const batteryGroups: RecBatteryStatus = {
     unknown: { entities: [] },
     critical: { entities: [] },
     low: { entities: [] },
@@ -46,26 +56,23 @@ export function buildBatteryStatusGroups(hass: HomeAssistant, config: BatteryCon
   const criticalThreshold = config.battery_critical_threshold ?? 20;
   const lowThreshold = config.battery_low_threshold ?? 50;
 
-  const isBinarySensor = (entityId: string) => entityId.startsWith('binary_sensor.');
-  const isUnavailableOrUnknown = (state: string) => (state === 'unavailable' || state === 'unknown');
-
   for (const entityId of filterBatteryEntities(hass, config)) {
-    let key: BatteryStatus;
+    let group: BatteryStatusGroup;
 
-    const state = hass.states[entityId];
-    if (config.show_unknown_battery_group && isUnavailableOrUnknown(state.state)) {
-      key = 'unknown';
-    } else if (isBinarySensor(entityId)) {
-      key = state.state === 'on' ? 'critical' : 'good';
+    // eslint-disable-next-line security/detect-object-injection
+    const state = hass.states[entityId]?.state || '';
+    if (config.show_unknown_battery_group && (state === 'unavailable' || state === 'unknown')) {
+      group = batteryGroups.unknown;
+    } else if (entityId.startsWith('binary_sensor.')) {
+      group = state === 'on' ? batteryGroups.critical : batteryGroups.good;
     } else {
-      const value = parseFloat(state.state);
-      if (isNaN(value)) key = 'critical';
-      else if (value < criticalThreshold) key = 'critical';
-      else if (value <= lowThreshold) key = 'low';
-      else key = 'good';
+      const value = parseFloat(state ?? '');
+      if (isNaN(value)) group = batteryGroups.critical;
+      else if (value < criticalThreshold) group = batteryGroups.critical;
+      else if (value <= lowThreshold) group = batteryGroups.low;
+      else group = batteryGroups.good;
     }
-
-    batteryGroups[key].entities.push(entityId);
+    group.entities.push(entityId);
   }
 
   return batteryGroups;
