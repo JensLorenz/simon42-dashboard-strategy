@@ -2,7 +2,7 @@
 // VIEW STRATEGY — BATTERIES (Battery Status Overview)
 // ====================================================================
 
-import type { HomeAssistant } from '../types/homeassistant';
+import type { HassEntity, HomeAssistant } from '../types/homeassistant';
 import type { LovelaceViewConfig, LovelaceSectionConfig, LovelaceCardConfig } from '../types/lovelace';
 import { Registry } from '../Registry';
 import { type BatteryStatus, type BatteryStatusGroup, buildBatteryStatusGroups, getBatteryStatusDisplay, getBatteryStatusGroup } from '../utils/battery-utils';
@@ -10,6 +10,35 @@ import { localize } from '../utils/localize';
 
 type BatteryStatusKeys = BatteryStatus[];
 type BatteryStatusKeyList = BatteryStatusKeys[];
+
+// Helper functions for sorting battery entities by their state values, then by friendly name as tiebreaker.
+// Entities with non-numeric states are sorted alphabetically at the end of the list.
+function getEntitySortName(entity: HassEntity): string {
+  const friendlyName = entity.attributes?.friendly_name;
+  if (typeof friendlyName === 'string' && friendlyName.trim().length > 0) {
+    return friendlyName;
+  }
+  return entity.entity_id.split('.')[1].replace(/_/g, ' ');
+}
+
+function compareByName(a: HassEntity, b: HassEntity): number {
+  const nameA = getEntitySortName(a);
+  const nameB = getEntitySortName(b);
+  return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+}
+
+function compareBatteryEntities(a: string, b: string, hass: HomeAssistant): number {
+  const entityA = hass.states[a];
+  const entityB = hass.states[b];
+  const valA = parseFloat(entityA?.state);
+  const valB = parseFloat(entityB?.state);
+
+  if (isNaN(valA) && isNaN(valB)) return compareByName(entityA, entityB);
+  if (isNaN(valA)) return -1;
+  if (isNaN(valB)) return 1;
+  if (valA !== valB) return valA - valB;
+  return compareByName(entityA, entityB);
+}
 
 /**
  * Smart Grid Layout:
@@ -67,13 +96,8 @@ class Simon42ViewBatteriesStrategy extends HTMLElement {
       for (const status of statusKeyList) {
 
         const group = getBatteryStatusGroup(batteryGroups, status);
-        const entities = group.entities.sort((a: string, b: string) =>{
-          const valA = parseFloat(hass.states[a]?.state);
-          const valB = parseFloat(hass.states[b]?.state);
-          if (isNaN(valA)) return -1;
-          if (isNaN(valB)) return 1;
-          return valA - valB;
-        });
+        const entities = group.entities
+          .sort((a: string, b: string) => compareBatteryEntities(a, b, hass));
 
         const style = getBatteryStatusDisplay(strategyConfig, status);
         const oneOrMany = entities.length === 1 ? 'battery_one' : 'battery_many';
